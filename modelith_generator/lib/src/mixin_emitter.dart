@@ -1,24 +1,31 @@
+import 'package:analyzer/dart/element/element.dart';
 import 'package:modelith_generator/src/class_shape.dart';
+import 'package:modelith_generator/src/field_equality.dart';
 import 'package:modelith_generator/src/model_field_config.dart';
 import 'package:modelith_generator/src/model_options.dart';
 
-/// Emits `mixin _$Foo`, the only generated member that has to live *inside* the
-/// class's interface: `props` satisfies `Equatable`, and `toJson()` spares the
-/// developer a second glue line.
+/// Emits `mixin _$Foo`, the only generated code that has to live *inside* the
+/// class's interface: `==`, `hashCode`, `toString` and `toJson()`.
 ///
 /// The mixin has no `on` clause — a mixin cannot be applied to the very class it
-/// is constrained on — so members reach the instance through a single
-/// `this as Foo` cast.
+/// is constrained on — so its superclass constraint is `Object`, which is
+/// exactly what makes overriding `==` here legal. Members reach the instance
+/// through a single `this as Foo` cast, which also keeps field type names (and
+/// their import prefixes) out of the mixin.
 class MixinEmitter {
   const MixinEmitter({required this.shape, required this.options});
+
+  /// `Object.hash` accepts 20 positional values; `runtimeType` takes one slot.
+  static const _maxHashArguments = 19;
 
   final ClassShape shape;
   final ModelOptions options;
 
   String emit() {
     final members = <String>[
-      if (options.equality) _props,
-      if (options.equality && options.stringify != null) _stringify,
+      if (options.equality) _equals,
+      if (options.equality) _hashCode,
+      if (options.equality && options.stringify) _toString,
       if (options.serializable && options.createToJson) _toJson,
     ];
 
@@ -30,24 +37,82 @@ class MixinEmitter {
     return 'mixin $name {\n${members.join('\n\n')}\n}';
   }
 
-  String get _props {
-    final fields = shape.declaredFields
-        .where((field) => ModelFieldConfig.of(field).equality)
-        .map((field) => field.displayName)
-        .toList();
+  /// The fields that define identity, in declaration order.
+  List<FieldElement> get _fields => shape.declaredFields
+      .where((field) => ModelFieldConfig.of(field).equality)
+      .toList();
+
+  String get _equals {
+    final fields = _fields;
+    final guard =
+        '    if (identical(this, other)) return true;\n'
+        '    if (other is! ${shape.selfType} || runtimeType != other.runtimeType) {\n'
+        '      return false;\n'
+        '    }';
 
     if (fields.isEmpty) {
-      return '  List<Object?> get props => const [];';
+      return '  @override\n'
+          '  bool operator ==(Object other) {\n'
+          '$guard\n'
+          '    return true;\n'
+          '  }';
     }
 
-    final values = fields.map((field) => 'self.$field').join(', ');
-    return '  List<Object?> get props {\n'
+    final comparisons = fields
+        .map(
+          (field) =>
+              FieldEqualityKind.of(field.type).comparison(field.displayName),
+        )
+        .join(' &&\n        ');
+
+    return '  @override\n'
+        '  bool operator ==(Object other) {\n'
+        '$guard\n'
         '    final self = this as ${shape.selfType};\n'
-        '    return [$values];\n'
+        '    return $comparisons;\n'
         '  }';
   }
 
-  String get _stringify => '  bool? get stringify => ${options.stringify};';
+  String get _hashCode {
+    final fields = _fields;
+    if (fields.isEmpty) {
+      return '  @override\n  int get hashCode => runtimeType.hashCode;';
+    }
+
+    final values = fields
+        .map(
+          (field) =>
+              FieldEqualityKind.of(field.type).hashValue(field.displayName),
+        )
+        .toList();
+
+    final combined = values.length <= _maxHashArguments
+        ? 'Object.hash(runtimeType, ${values.join(', ')})'
+        : 'ModelEquality.hashAllOf([runtimeType, ${values.join(', ')}])';
+
+    return '  @override\n'
+        '  int get hashCode {\n'
+        '    final self = this as ${shape.selfType};\n'
+        '    return $combined;\n'
+        '  }';
+  }
+
+  String get _toString {
+    final fields = _fields;
+    if (fields.isEmpty) {
+      return "  @override\n  String toString() => '${shape.name}()';";
+    }
+
+    final parts = fields
+        .map((field) => '${field.displayName}: \${self.${field.displayName}}')
+        .join(', ');
+
+    return '  @override\n'
+        '  String toString() {\n'
+        '    final self = this as ${shape.selfType};\n'
+        "    return '${shape.name}($parts)';\n"
+        '  }';
+  }
 
   String get _toJson {
     final toJsonFunction = '_\$${shape.name}ToJson';

@@ -33,12 +33,27 @@ extension $SessionModelCopyWith on SessionModel {
 }
 
 mixin _$SessionModel {
-  List<Object?> get props {
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! SessionModel || runtimeType != other.runtimeType) {
+      return false;
+    }
     final self = this as SessionModel;
-    return [self.token, self.lastSeenAt];
+    return self.token == other.token && self.lastSeenAt == other.lastSeenAt;
   }
 
-  bool? get stringify => true;
+  @override
+  int get hashCode {
+    final self = this as SessionModel;
+    return Object.hash(runtimeType, self.token, self.lastSeenAt);
+  }
+
+  @override
+  String toString() {
+    final self = this as SessionModel;
+    return 'SessionModel(token: ${self.token}, lastSeenAt: ${self.lastSeenAt})';
+  }
 
   Map<String, dynamic> toJson() => _$SessionModelToJson(this as SessionModel);
 }

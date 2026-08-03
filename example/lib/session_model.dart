@@ -4,8 +4,8 @@ part 'session_model.g.dart';
 
 /// Exercises the per-field options: a renamed json key, a field kept out of
 /// equality, and a field that `copyWith` refuses to replace.
-@Model(stringify: true)
-class SessionModel with Equatable, _$SessionModel {
+@Model()
+class SessionModel with _$SessionModel {
   const SessionModel({
     required this.token,
     required this.deviceId,

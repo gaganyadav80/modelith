@@ -28,9 +28,31 @@ extension $PageModelCopyWith<T> on PageModel<T> {
 }
 
 mixin _$PageModel<T> {
-  List<Object?> get props {
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! PageModel<T> || runtimeType != other.runtimeType) {
+      return false;
+    }
     final self = this as PageModel<T>;
-    return [self.items, self.total];
+    return ModelEquality.iterables(self.items, other.items) &&
+        self.total == other.total;
+  }
+
+  @override
+  int get hashCode {
+    final self = this as PageModel<T>;
+    return Object.hash(
+      runtimeType,
+      ModelEquality.hashOf(self.items),
+      self.total,
+    );
+  }
+
+  @override
+  String toString() {
+    final self = this as PageModel<T>;
+    return 'PageModel(items: ${self.items}, total: ${self.total})';
   }
 
   Map<String, dynamic> toJson(Object? Function(T value) toJsonT) =>

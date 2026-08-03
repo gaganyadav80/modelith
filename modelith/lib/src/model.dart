@@ -7,7 +7,7 @@ import 'package:meta/meta_meta.dart';
 ///
 /// * `_$FooFromJson` / `_$FooToJson` (delegated to `json_serializable`),
 /// * a `$FooCopyWith` extension carrying `copyWith`,
-/// * a `mixin _$Foo` supplying `props` (for `Equatable`) and `toJson()`.
+/// * a `mixin _$Foo` supplying `==`, `hashCode`, `toString` and `toJson()`.
 ///
 /// The class stays an ordinary Dart class with real fields and a real
 /// constructor. The one piece of glue that cannot be generated is the
@@ -15,7 +15,7 @@ import 'package:meta/meta_meta.dart';
 ///
 /// ```dart
 /// @Model()
-/// class Foo with Equatable, _$Foo {
+/// class Foo with _$Foo {
 ///   const Foo(this.bar);
 ///
 ///   factory Foo.fromJson(Map<String, dynamic> json) => _$FooFromJson(json);
@@ -34,7 +34,7 @@ class Model {
     this.serializable = true,
     this.copyWith = true,
     this.equality = true,
-    this.stringify,
+    this.stringify = true,
     this.constructor,
     this.anyMap,
     this.checked,
@@ -63,16 +63,16 @@ class Model {
   /// Generate the `$FooCopyWith` extension.
   final bool copyWith;
 
-  /// Generate `props` into the `_$Foo` mixin.
+  /// Generate `==`, `hashCode` and (with [stringify]) `toString` into the
+  /// `_$Foo` mixin.
   ///
-  /// When `false`, drop `Equatable` from the class's `with` clause.
+  /// When `false` the class keeps identity equality.
   final bool equality;
 
-  /// Overrides `Equatable.stringify` for this model.
+  /// Generate a `toString` listing the fields that make up equality.
   ///
-  /// `null` (the default) leaves the global `EquatableConfig.stringify` in
-  /// charge.
-  final bool? stringify;
+  /// Ignored when [equality] is `false`, since there are no fields to list.
+  final bool stringify;
 
   /// Name of the constructor used by both `fromJson` and `copyWith`.
   ///

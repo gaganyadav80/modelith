@@ -5,7 +5,7 @@ part 'opt_out_models.g.dart';
 /// `serializable: false` — no json functions, no `toJson()`, and no
 /// hand-written `fromJson` line.
 @Model(serializable: false)
-class PlainPoint with Equatable, _$PlainPoint {
+class PlainPoint with _$PlainPoint {
   const PlainPoint(this.x, this.y);
 
   @ModelField()
@@ -15,9 +15,10 @@ class PlainPoint with Equatable, _$PlainPoint {
   final int y;
 }
 
-/// `copyWith: false` — no `$NoCopyTokenCopyWith` extension.
-@Model(copyWith: false)
-class NoCopyToken with Equatable, _$NoCopyToken {
+/// `copyWith: false` — no `$NoCopyTokenCopyWith` extension. `stringify: false`
+/// also drops the generated `toString`.
+@Model(copyWith: false, stringify: false)
+class NoCopyToken with _$NoCopyToken {
   const NoCopyToken({required this.value});
 
   factory NoCopyToken.fromJson(Map<String, dynamic> json) =>

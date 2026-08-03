@@ -11,9 +11,26 @@ extension $PlainPointCopyWith on PlainPoint {
 }
 
 mixin _$PlainPoint {
-  List<Object?> get props {
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! PlainPoint || runtimeType != other.runtimeType) {
+      return false;
+    }
     final self = this as PlainPoint;
-    return [self.x, self.y];
+    return self.x == other.x && self.y == other.y;
+  }
+
+  @override
+  int get hashCode {
+    final self = this as PlainPoint;
+    return Object.hash(runtimeType, self.x, self.y);
+  }
+
+  @override
+  String toString() {
+    final self = this as PlainPoint;
+    return 'PlainPoint(x: ${self.x}, y: ${self.y})';
   }
 }
 
@@ -24,9 +41,20 @@ Map<String, dynamic> _$NoCopyTokenToJson(NoCopyToken instance) =>
     <String, dynamic>{'value': instance.value};
 
 mixin _$NoCopyToken {
-  List<Object?> get props {
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! NoCopyToken || runtimeType != other.runtimeType) {
+      return false;
+    }
     final self = this as NoCopyToken;
-    return [self.value];
+    return self.value == other.value;
+  }
+
+  @override
+  int get hashCode {
+    final self = this as NoCopyToken;
+    return Object.hash(runtimeType, self.value);
   }
 
   Map<String, dynamic> toJson() => _$NoCopyTokenToJson(this as NoCopyToken);
