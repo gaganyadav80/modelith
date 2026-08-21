@@ -135,7 +135,21 @@ class _Parameter {
       ? 'Object? $name = \$unset'
       : '${type.getDisplayString()}? $name';
 
-  String get value => _needsSentinel
-      ? '$name == \$unset ? this.$name : $name as ${type.getDisplayString()}'
-      : '$name ?? this.$name';
+  /// A parameter is already declared `Object?`, so casting to `Object?` or
+  /// `dynamic` would only trip `unnecessary_cast` in the generated file.
+  bool get _needsCast =>
+      type is! DynamicType &&
+      !(type.isDartCoreObject &&
+          type.nullabilitySuffix == NullabilitySuffix.question);
+
+  String get value {
+    if (!_needsSentinel) {
+      return '$name ?? this.$name';
+    }
+
+    final replacement = _needsCast
+        ? '$name as ${type.getDisplayString()}'
+        : name;
+    return '$name == \$unset ? this.$name : $replacement';
+  }
 }

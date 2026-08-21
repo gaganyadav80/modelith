@@ -22,7 +22,7 @@ class ModelOptions {
     createToJson: annotation.peek('createToJson')?.boolValue ?? true,
     genericArgumentFactories:
         annotation.peek('genericArgumentFactories')?.boolValue ?? false,
-    stringify: annotation.peek('stringify')?.boolValue,
+    stringify: annotation.peek('stringify')?.boolValue ?? true,
     constructor: annotation.peek('constructor')?.stringValue,
   );
 
@@ -42,7 +42,8 @@ class ModelOptions {
   /// `toJson()` wrapper.
   final bool genericArgumentFactories;
 
-  final bool? stringify;
+  /// Whether to generate `toString`. Only meaningful with [equality].
+  final bool stringify;
 
   /// Constructor used for `copyWith` (and by `json_serializable` for
   /// `fromJson`). `null` means the unnamed constructor.

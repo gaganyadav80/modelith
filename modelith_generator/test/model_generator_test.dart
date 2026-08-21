@@ -41,7 +41,7 @@ void main() {
   test('emits json, copyWith and the mixin into one part', () async {
     final generated = await _generate('''
 @Model()
-class Foo with Equatable, _\$Foo {
+class Foo with _\$Foo {
   const Foo({required this.bar, this.baz});
 
   factory Foo.fromJson(Map<String, dynamic> json) => _\$FooFromJson(json);
@@ -59,7 +59,10 @@ class Foo with Equatable, _\$Foo {
     expect(part, contains("'bar_value': instance.bar"));
     expect(part, contains('extension \$FooCopyWith on Foo {'));
     expect(part, contains('mixin _\$Foo {'));
-    expect(part, contains('return [self.bar];'));
+    expect(part, contains('bool operator ==(Object other)'));
+    expect(part, contains('return self.bar == other.bar;'));
+    expect(part, contains('Object.hash(runtimeType, self.bar)'));
+    expect(part, contains("return 'Foo(bar: \${self.bar})';"));
     expect(part, contains('baz: baz'));
   });
 
@@ -76,14 +79,14 @@ class Foo with _\$Foo {
     final part = generated.part!;
     expect(part, isNot(contains('_\$FooFromJson')));
     expect(part, isNot(contains('CopyWith')));
-    expect(part, isNot(contains('props')));
+    expect(part, isNot(contains('operator ==')));
     expect(part, contains('mixin _\$Foo {}'));
   });
 
   test('reports a missing constructor instead of crashing', () async {
     final generated = await _generate('''
 @Model(serializable: false, constructor: 'nope')
-class Foo with Equatable, _\$Foo {
+class Foo with _\$Foo {
   const Foo(this.bar);
 
   final String bar;

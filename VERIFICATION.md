@@ -100,8 +100,8 @@ ourselves**. Consequences:
 
 The builder is a single `SharedPartBuilder([ModelGenerator(...)], 'modelith')`
 with `applies_builders: ["source_gen|combining_builder"]`, so the shared part is
-merged into one file. The example package has five inputs and produces exactly
-five `.g.dart` files and nothing else; `opt_out_models.g.dart` holds three
+merged into one file. The example package has six inputs and produces exactly
+six `.g.dart` files and nothing else; `opt_out_models.g.dart` holds three
 models' json functions, extensions and mixins in one file.
 `example/test/single_output_test.dart` asserts the 1:1 mapping and that each
 generated file has a single `part of` and a single generator header.
@@ -116,12 +116,13 @@ Resolved during verification (Dart SDK 3.11.3, Flutter 3.41.5):
 | `build` | 4.0.9 | `^4.0.0` |
 | `build_runner` | 2.15.3 | `^2.15.0` (dev) |
 | `build_test` | 3.5.18 | `^3.0.0` (dev) |
-| `equatable` | 2.1.0 | `^2.1.0` |
+| `equatable` | 2.1.0 | **not depended on** — dev-only, for the benchmark comparison |
 | `json_annotation` | 4.12.0 | `^4.12.0` |
 | `json_serializable` | 6.14.1 | `^6.14.0` |
 | `meta` | 1.19.0 | `^1.19.0` |
 | `source_gen` | 4.2.4 | `^4.2.0` |
 | `dart_style` | 3.1.12 | transitive (output formatting) |
+| `collection` | 1.19.1 | **not depended on** — dev-only, for the benchmark comparison |
 | `copy_with_extension` / `copy_with_extension_gen` | 15.0.1 | **not depended on** (see G3) |
 
 ## Additional findings not in the original gates
@@ -139,25 +140,76 @@ superclass constraint and reaches the instance through one cast per member:
 
 ```dart
 mixin _$Foo {
-  List<Object?> get props {
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! Foo || runtimeType != other.runtimeType) return false;
     final self = this as Foo;
-    return [self.bar];
+    return self.bar == other.bar;
   }
 
   Map<String, dynamic> toJson() => _$FooToJson(this as Foo);
 }
 ```
 
-A side benefit: no field types are written into the mixin, so import prefixes
-and private types cannot break it.
+Two side benefits: no field types are written into the mixin, so import prefixes
+and private types cannot break it; and because the implicit constraint is
+`Object`, overriding `==`/`hashCode`/`toString` here is legal — which is what
+made dropping `Equatable` possible.
 
-### `EquatableMixin` is deprecated
+### `equatable` was dropped entirely
 
-`equatable` 2.1.0 declares `abstract mixin class Equatable` and deprecates
-`EquatableMixin` ("use Equatable as a mixin instead"). The documented header is
-`class Foo with Equatable, _$Foo`, which analyzes clean; `EquatableMixin` would
-raise `deprecated_member_use`. Deep collection comparison for lists, sets and
-maps is built into `equatable`, so no extra flag was added.
+Two findings pushed equality out of `equatable` and into generated code:
+
+1. `EquatableMixin` is deprecated in 2.1.0 ("use Equatable as a mixin instead";
+   `abstract mixin class Equatable`), so the header would have been
+   `class Foo with Equatable, _$Foo`.
+2. `equatable`'s comparison helpers are **not reachable**. `equatable.dart`
+   exports `src/equatable.dart`, `src/equatable_config.dart` and
+   `src/equatable_mixin.dart`; `equals`, `mapPropsToHashCode` and
+   `mapPropsToString` live in `src/equatable_utils.dart`, which nothing exports.
+   Reusing them would need an implementation import — the thing rejected in G3.
+
+Since the mixin has no `on` clause, its superclass constraint is `Object`, so it
+can legally `@override` `==`, `hashCode` and `toString`, and in
+`class Foo with _$Foo` it wins over `Object`. That removes `Equatable` from the
+class header altogether: `with _$Foo` is the entire `with` clause, and
+`modelith` has no `equatable` dependency.
+
+`ModelEquality` in the runtime package carries the comparison, and
+`FieldEqualityKind` in the generator picks the call from each field's **static**
+type at build time — scalars compile to `a == b`, only collections and
+`dynamic`/`Object`/type-parameter fields call a helper.
+
+`DeepCollectionEquality` from `package:collection` was considered as the
+replacement and rejected on measurements, not taste.
+`example/benchmark/equality_benchmark.dart` (Dart 3.11.3, Apple Silicon, 300k
+iterations, ns/op, median of three runs):
+
+| Case | equatable | `DeepCollectionEquality` | modelith |
+| --- | --- | --- | --- |
+| `==`, scalar fields | ~24 | — | **~11** |
+| `==`, list + set + map + nested list | ~545 | ~1450 | **~400** |
+| `hashCode`, same collections | ~680–890 | ~420–570 | **~375–560** |
+
+`DeepCollectionEquality` is ~3.5x slower than the generated code on deep `==`.
+The generated code wins by doing less: compile-time dispatch instead of a runtime
+`is Set`/`is Map`/`is Iterable` ladder per field, no props list allocated per
+comparison, `O(n)` set/map matching through hash lookup where `equatable` scans
+`O(n²)` (`b.any((e) => objectsEquals(element, e))`), a single lockstep walk for
+lazy iterables where `equatable` uses `elementAt` in a loop, and no sorting
+inside `hashCode` (`equatable`'s `_combine` sorts sets and map keys on every
+call).
+
+Two deliberate behaviour differences from `equatable`:
+
+* `hashCode` uses `Object.hash`, which the SDK documents as *not* stable across
+  runs. That is the `hashCode` contract; only golden tests asserting literal
+  hashes are affected.
+* A `List` and a `Set` holding the same elements are not equal. `equatable`'s
+  `iterableEquals` only guards this with an `assert`, so in release mode it
+  reports them equal; `ModelEquality.objects` checks the container kind from both
+  sides.
 
 ### Nested models need `implements JsonModel`
 

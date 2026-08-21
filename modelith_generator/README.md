@@ -30,8 +30,15 @@ The generator orchestrates rather than reimplements:
    `json_serializable`'s own builder.
 3. If `copyWith`, emits the `$FooCopyWith` extension from the target
    constructor's parameters.
-4. Emits `mixin _$Foo` with `props`, an optional `stringify` override, and
-   `toJson()`.
+4. Emits `mixin _$Foo` with `==`, `hashCode`, an optional `toString`, and
+   `toJson()`. The mixin has no `on` clause, so its superclass constraint is
+   `Object` — which is what makes overriding `==` there legal.
+
+Equality is emitted field by field, with the comparison chosen from each field's
+*static* type at build time (`field_equality.dart`): scalars become `a == b`,
+collections call the matching `ModelEquality` helper, and only `dynamic` /
+`Object` / type-parameter fields pay for runtime dispatch. Nothing allocates a
+props list per comparison.
 
 Per-field json config rides on `@ModelField` for free: it is a `JsonKey`
 subtype, and source_gen's annotation matching is assignability based.

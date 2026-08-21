@@ -8,6 +8,7 @@ committed so the output can be reviewed without running a build.
 | `lib/address_model.dart` | flat model, nullable field, `implements JsonModel` |
 | `lib/user_model.dart` | nested `@Model` field, list field, `explicitToJson` |
 | `lib/session_model.dart` | renamed json keys, `equality: false`, `copyWith: false`, `stringify` |
+| `lib/prefs_model.dart` | every deep-equality path: list, set, map, nested list, `Object?` |
 | `lib/page_model.dart` | generic model with `genericArgumentFactories` |
 | `lib/opt_out_models.dart` | one class per `@Model` opt-out flag, three models in one part file |
 
@@ -15,4 +16,9 @@ committed so the output can be reviewed without running a build.
 dart pub get
 dart run build_runner build
 dart test
+dart run benchmark/equality_benchmark.dart
 ```
+
+The benchmark compares the generated `==`/`hashCode` against an `Equatable`
+model of the same shape and against `DeepCollectionEquality`; `equatable` and
+`collection` are dev dependencies here for that comparison only.

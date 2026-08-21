@@ -6,7 +6,7 @@ part 'user_model.g.dart';
 /// A nested model: [address] is itself a `@Model` class, and [tags] exercises
 /// Equatable's deep collection comparison.
 @Model(explicitToJson: true)
-class UserModel with Equatable, _$UserModel {
+class UserModel with _$UserModel {
   const UserModel({
     required this.id,
     required this.address,

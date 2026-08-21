@@ -30,9 +30,33 @@ extension $UserModelCopyWith on UserModel {
 }
 
 mixin _$UserModel {
-  List<Object?> get props {
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! UserModel || runtimeType != other.runtimeType) {
+      return false;
+    }
     final self = this as UserModel;
-    return [self.id, self.address, self.tags];
+    return self.id == other.id &&
+        self.address == other.address &&
+        ModelEquality.iterables(self.tags, other.tags);
+  }
+
+  @override
+  int get hashCode {
+    final self = this as UserModel;
+    return Object.hash(
+      runtimeType,
+      self.id,
+      self.address,
+      ModelEquality.hashOf(self.tags),
+    );
+  }
+
+  @override
+  String toString() {
+    final self = this as UserModel;
+    return 'UserModel(id: ${self.id}, address: ${self.address}, tags: ${self.tags})';
   }
 
   Map<String, dynamic> toJson() => _$UserModelToJson(this as UserModel);
