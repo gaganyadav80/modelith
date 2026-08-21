@@ -1,4 +1,5 @@
 import 'package:modelith_example/address_model.dart';
+import 'package:modelith_example/converter_model.dart';
 import 'package:modelith_example/session_model.dart';
 import 'package:modelith_example/user_model.dart';
 import 'package:test/test.dart';
@@ -47,6 +48,37 @@ void main() {
         SessionModel.fromJson({'access_token': 't', 'device_id': 'd'}),
         SessionModel(token: 't', deviceId: 'd'),
       );
+    });
+
+    test('@ModelField(fromJson:) converts on the way in', () {
+      final decoded = ConverterModel.fromJson({
+        'slug': 'Lisbon-Centre',
+        'tags': 'city,beach',
+      });
+
+      expect(decoded.slug, 'lisbon-centre');
+      expect(decoded.tags, ['city', 'beach']);
+    });
+
+    test('@ModelField(toJson:) converts on the way out', () {
+      const model = ConverterModel(slug: 'lisbon', tags: ['city', 'beach']);
+
+      expect(model.toJson(), {
+        'slug': 'LISBON',
+        'tags': 'city,beach',
+        'id': null,
+      });
+    });
+
+    test('@ModelField(readValue:) falls back to the legacy key', () {
+      final decoded = ConverterModel.fromJson({
+        'slug': 'a',
+        'tags': '',
+        'legacy_id': 'old-1',
+      });
+
+      expect(decoded.legacyId, 'old-1');
+      expect(decoded.tags, isEmpty);
     });
   });
 }

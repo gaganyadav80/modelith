@@ -54,6 +54,4 @@ mixin _$SessionModel {
     final self = this as SessionModel;
     return 'SessionModel(token: ${self.token}, lastSeenAt: ${self.lastSeenAt})';
   }
-
-  Map<String, dynamic> toJson() => _$SessionModelToJson(this as SessionModel);
 }

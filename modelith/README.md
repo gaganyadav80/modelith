@@ -4,10 +4,12 @@ One annotation for Dart data models. `@Model()` on a plain class generates
 `fromJson`/`toJson`, `copyWith` and value equality — all into a single
 `.g.dart` part file.
 
-Two annotations exist and that is the whole API surface: `@Model()` on the class,
-`@ModelField()` on a field. You never write `@JsonSerializable`, `@JsonKey`,
-`@CopyWith`, a `props` list, or an `==`/`hashCode` pair. There is no base class
-and no equality mixin to remember — `with _$AddressModel` is the whole header.
+Four annotations exist and that is the whole API surface: `@Model()` on the class,
+`@ModelField()` on a field, `@ModelEnum()` and `@ModelValue()` on an enum a model
+holds. You never write `@JsonSerializable`, `@JsonKey`, `@JsonEnum`, `@CopyWith`,
+a `props` list, or an `==`/`hashCode` pair — and `modelith` is the only import.
+There is no base class and no equality mixin to remember — `with _$AddressModel`
+is the whole header.
 
 ```dart
 import 'package:modelith/modelith.dart';
@@ -15,12 +17,14 @@ import 'package:modelith/modelith.dart';
 part 'address_model.g.dart';
 
 @Model()
-class AddressModel with _$AddressModel implements JsonModel {
+class AddressModel with _$AddressModel {
   const AddressModel({required this.city, required this.postcode});
 
-  // The one required glue line — see "Why the fromJson line" below.
+  // The two required glue lines — see "Why the json lines" below.
   factory AddressModel.fromJson(Map<String, dynamic> json) =>
       _$AddressModelFromJson(json);
+
+  Map<String, dynamic> toJson() => _$AddressModelToJson(this);
 
   @ModelField()
   final String city;
@@ -69,9 +73,12 @@ For `class Foo`, into `foo.g.dart` and nothing else:
 | --- | --- | --- |
 | `_$FooFromJson` / `_$FooToJson` | top-level functions | `json_serializable`, invoked by the generator |
 | `$FooCopyWith` | `extension` on `Foo` | modelith |
-| `_$Foo` | `mixin` with `==`, `hashCode`, `toString` and `toJson()` | modelith |
+| `_$Foo` | `mixin` with `==`, `hashCode` and `toString` | modelith |
 
-## Why the `fromJson` line cannot be generated
+Plus one `const _$TierEnumMap` per enum the library serializes — see
+[Enums](#enums).
+
+## Why the json lines cannot be generated
 
 Mixins, extensions and part files can only *add to a library*. None of them can
 declare a constructor or add a member to an existing class body, so `with _$Foo`
@@ -80,8 +87,14 @@ generating a factory in place, but they are not in stable Dart as of mid-2026.
 
 `freezed` avoids the line only by turning your class into a redirect shell over a
 generated implementation class — exactly the lock-in modelith rejects. So: one
-hand-written `fromJson` factory per serializable model. `toJson()` needs no line;
-it lives in the `_$Foo` mixin.
+hand-written `fromJson` factory per serializable model.
+
+`toJson()` *could* live in the mixin, and deliberately does not. A `toJson()`
+reached through a mixin is invisible to `json_serializable` while an **enclosing**
+model is being generated — the mixin does not exist yet at that point — so every
+model embedding another model would need a marker interface to be serializable at
+all. Declaring `toJson()` in the class body costs one line and removes that whole
+failure mode: nesting just works.
 
 ## The `with` clause
 
@@ -90,12 +103,14 @@ feature is switched off (empty in that case), so the class header never has to
 change as you toggle things — and there is no second mixin or base class to keep
 in sync.
 
-| Flags | Class header | `fromJson` line |
+| Flags | Class header | json lines |
 | --- | --- | --- |
-| default (all on) | `class Foo with _$Foo` | required |
-| `equality: false` | `class Foo with _$Foo` | required |
-| `serializable: false` | `class Foo with _$Foo` | omit |
-| `serializable: false, equality: false` | `class Foo with _$Foo` | omit |
+| default (all on) | `class Foo with _$Foo` | `fromJson` + `toJson` |
+| `equality: false` | `class Foo with _$Foo` | `fromJson` + `toJson` |
+| `createFactory: false` | `class Foo with _$Foo` | `toJson` only |
+| `createToJson: false` | `class Foo with _$Foo` | `fromJson` only |
+| `serializable: false` | `class Foo with _$Foo` | omit both |
+| `serializable: false, equality: false` | `class Foo with _$Foo` | omit both |
 
 `copyWith` is an extension, so it never affects the header.
 
@@ -107,21 +122,11 @@ that also defines `==` takes precedence.
 
 ### Nesting a model inside another model
 
-Add `implements JsonModel` to any serializable model that is used as a *field of
-another model*:
-
-```dart
-@Model()
-class AddressModel with _$AddressModel implements JsonModel { ... }
-```
-
-`JsonModel` declares nothing but `Map<String, dynamic> toJson()`, which the
-generated mixin already satisfies — there is no extra code to write. It exists
-because the nested model's `toJson()` lives in a mixin that does not exist yet at
-the moment the *outer* model's json code is generated, and `json_serializable`
-needs a resolvable declaration to find. The generator detects the missing
-interface and tells you exactly what to add, so you will never debug this from a
-cryptic upstream message.
+Nothing to do. A model used as a *field of another model* needs no marker
+interface and no base class — its hand-written `toJson()` is a real declaration
+in the class body, which is exactly what `json_serializable` resolves when it
+generates the outer model. The nested model does not even have to be a `@Model`
+class; any type with a `toJson()` and a `fromJson` factory works, as always.
 
 ## `@Model` options
 
@@ -129,7 +134,7 @@ Modelith's own flags:
 
 | Option | Default | Effect |
 | --- | --- | --- |
-| `serializable` | `true` | `_$FooFromJson` / `_$FooToJson` + `toJson()` in the mixin |
+| `serializable` | `true` | `_$FooFromJson` / `_$FooToJson` |
 | `copyWith` | `true` | the `$FooCopyWith` extension |
 | `equality` | `true` | `props` in the mixin |
 | `stringify` | `true` | generate `toString` listing the equality fields; ignored when `equality` is `false` |
@@ -157,10 +162,10 @@ targets:
 
 ## `@ModelField` options
 
-`ModelField extends JsonKey`, so every json option is available here —
+`ModelField implements JsonKey`, so every json option is available here —
 `name`, `defaultValue`, `includeIfNull`, `includeFromJson`, `includeToJson`,
 `fromJson`, `toJson`, `readValue`, `required`, `disallowNullValue`,
-`unknownEnumValue` — plus two of ours:
+`explicitJsonNullWhenNonNullField`, `unknownEnumValue` — plus two of ours:
 
 | Option | Default | Effect |
 | --- | --- | --- |
@@ -174,6 +179,47 @@ final String deviceId;
 
 Annotating a field is optional — unannotated fields are serialized, compared and
 copied with the defaults.
+
+## Enums
+
+An `enum` a model holds is configured with `@ModelEnum` on the declaration and
+`@ModelValue` on the entries. Nothing else is needed — `json_annotation` stays
+out of your imports and out of your `pubspec.yaml`.
+
+```dart
+@ModelEnum(fieldRename: FieldRename.snake)
+enum Tier {
+  freeTrial, // 'free_trial'
+  @ModelValue('paid')
+  paidMonthly, // 'paid'
+}
+
+@Model()
+class MemberModel with _$MemberModel {
+  // ...
+  @ModelField(unknownEnumValue: Role.guest)
+  final Role role;
+}
+```
+
+| Option | Default | Effect |
+| --- | --- | --- |
+| `ModelEnum.fieldRename` | `FieldRename.none` | encodes the entries that carry no `@ModelValue` |
+| `ModelEnum.valueField` | `null` | field of an enhanced enum to encode instead of the entry name |
+| `ModelEnum.alwaysCreate` | `false` | emit `_$TierEnumMap` even when no model in the library holds the enum |
+| `ModelValue(value)` | — | wire value of one entry: a `String`, an `int` or `null` |
+| `ModelField.unknownEnumValue` | `null` | entry to decode to when the wire value is not in the map, instead of throwing |
+
+An enum is not a `@Model` target — it has no fields to copy or compare. Its map
+is generated into the part file of the library that declares it, so a file
+holding only enums still needs its `part '<file>.g.dart';` when `alwaysCreate`
+is on. Enums used by a model need nothing: the map rides along in the model's
+part file, once, however many models hold it.
+
+`ModelEnum` and `ModelValue` are aliases of `JsonEnum` and `JsonValue`, not
+subtypes. `json_serializable` matches the entry annotation by exact type, so a
+subtype would be skipped silently; an alias is the same constant under a
+Modelith name, and `@JsonEnum` / `@JsonValue` keep working unchanged.
 
 ## `copyWith` semantics
 
@@ -191,8 +237,8 @@ copied with the defaults.
 
 ### Generic models
 
-`@Model(genericArgumentFactories: true)` works, and the generated `toJson()`
-takes the per-argument encoder so it matches `_$FooToJson`:
+`@Model(genericArgumentFactories: true)` works; both json lines take a
+per-argument codec, matching the generated functions they delegate to:
 
 ```dart
 @Model(genericArgumentFactories: true)
@@ -204,6 +250,9 @@ class PageModel<T> with _$PageModel<T> {
     T Function(Object? json) fromJsonT,
   ) => _$PageModelFromJson(json, fromJsonT);
 
+  Map<String, dynamic> toJson(Object? Function(T value) toJsonT) =>
+      _$PageModelToJson(this, toJsonT);
+
   @ModelField()
   final List<T> items;
 
@@ -214,9 +263,9 @@ class PageModel<T> with _$PageModel<T> {
 page.toJson((address) => address.toJson());
 ```
 
-Note the `_$PageModel<T>` in the `with` clause, and that such a model cannot
-also `implements JsonModel` — that interface declares a zero-argument
-`toJson()`.
+Note the `_$PageModel<T>` in the `with` clause. Such a model still cannot be
+*nested* in another model: `json_serializable` calls a zero-argument `toJson()`
+on a field, and this one takes the encoder.
 
 ## Equality
 
@@ -260,6 +309,45 @@ mixin _$SessionModel {
 The `runtimeType` check keeps equality symmetric across subclasses, matching what
 `Equatable` did.
 
+### Inherited fields
+
+Fields the model inherits through `extends` and `with` take part in `==`,
+`hashCode` and `toString` alongside the ones it declares itself. The base class
+does not have to be a `@Model`, and `@ModelField(equality: false)` works on its
+fields too:
+
+```dart
+abstract class RecordBase {
+  const RecordBase({required this.id, required this.revision});
+
+  final String id;
+
+  @ModelField(equality: false)
+  final int revision;
+}
+
+@Model()
+class NoteModel extends RecordBase with Archivable, _$NoteModel { ... }
+
+// NoteModel(id: n1, archived: false, title: Groceries)
+```
+
+The order is superclass-first, then declaration order — the same list, in the
+same order, that `json_serializable` writes into `toJson`, so generated equality
+and generated json always talk about the same class. A field redeclared lower in
+the hierarchy keeps the position of its topmost declaration but takes the
+options from its lowest one, so a `@ModelField` on an override wins.
+
+Two kinds of field are left out, because generated code cannot read them:
+
+* a field reached only through `implements` — an implementing class redeclares
+  it anyway, and it is picked up from that declaration;
+* a private field of a superclass in *another library*, which is out of scope
+  for the generated part.
+
+A computed getter is never a field, so it never joins equality. Put the value in
+a field if it should count.
+
 ### Performance
 
 `example/benchmark/equality_benchmark.dart` compares the generated code against
@@ -294,10 +382,10 @@ nested collections. Two differences worth knowing:
 
 ## Known limitations
 
-* **Superclass fields are not included.** `props` and `copyWith` cover the
-  fields the class itself declares. A `copyWith` *constructor parameter* that
-  maps to an inherited field is still handled, but inherited fields are not added
-  to `props` on their own.
+* **`copyWith` is driven by the constructor, not by the field list.** Equality
+  covers inherited fields on its own (see [Inherited fields](#inherited-fields)),
+  but `copyWith` can only offer a parameter the chosen constructor accepts — an
+  inherited field the constructor never takes is carried over untouched.
 * **Aliased imports.** Generated `copyWith` parameter types are written without
   import prefixes, so a model whose field type is imported under a prefix
   (`import '...' as x;`) may not compile. Same limitation as
@@ -310,9 +398,9 @@ nested collections. Two differences worth knowing:
 * **Superclass `==` is replaced, not extended.** A `@Model` class that extends a
   base class with its own `==` gets the generated one instead.
 * **A generic model with `genericArgumentFactories` cannot be nested** in
-  another model, because its `toJson()` takes arguments and `JsonModel` does not.
-* **Enums** are not `@Model` targets; use `@JsonEnum` from `json_annotation` as
-  usual.
+  another model, because its `toJson()` takes arguments and `json_serializable`
+  calls a field's `toJson()` with none.
+* **Enums** are not `@Model` targets; annotate them with `@ModelEnum` instead.
 * **Deep collection comparison is always on** for list, set and map fields;
   there is no flag to fall back to identity comparison. A field typed by a custom
   collection class that does *not* implement `Iterable`/`Map` is compared with
@@ -326,8 +414,8 @@ generated:
 1. Copy `_$FooFromJson` / `_$FooToJson`, the `$FooCopyWith` extension and the
    `_$Foo` mixin body out of `foo.g.dart` into a normal file.
 2. Delete the `part` directive and the `@Model` / `@ModelField` annotations.
-3. Paste the mixin's `==`, `hashCode`, `toString` and `toJson()` into the class
-   body if you prefer. They are ordinary Dart; the only symbol they reference
+3. Paste the mixin's `==`, `hashCode` and `toString` into the class body if you
+   prefer. They are ordinary Dart; the only symbol they reference
    from this package is `ModelEquality`, and only for collection fields.
 
 The class itself does not change, so there is no structural rewrite and no
@@ -337,5 +425,5 @@ migration of call sites.
 
 | Package | Role |
 | --- | --- |
-| `modelith` | annotations, equality helpers, `json_annotation` re-export (runtime dependency) |
+| `modelith` | annotations, equality helpers, `json_annotation` re-export — the only runtime dependency you add |
 | `modelith_generator` | the builder (dev dependency) |

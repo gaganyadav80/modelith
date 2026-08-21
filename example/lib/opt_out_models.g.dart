@@ -56,8 +56,6 @@ mixin _$NoCopyToken {
     final self = this as NoCopyToken;
     return Object.hash(runtimeType, self.value);
   }
-
-  Map<String, dynamic> toJson() => _$NoCopyTokenToJson(this as NoCopyToken);
 }
 
 MutableCounter _$MutableCounterFromJson(Map<String, dynamic> json) =>
@@ -71,7 +69,4 @@ extension $MutableCounterCopyWith on MutableCounter {
       MutableCounter(count: count ?? this.count);
 }
 
-mixin _$MutableCounter {
-  Map<String, dynamic> toJson() =>
-      _$MutableCounterToJson(this as MutableCounter);
-}
+mixin _$MutableCounter {}

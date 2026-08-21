@@ -5,7 +5,13 @@ import 'package:modelith_generator/src/model_field_config.dart';
 import 'package:modelith_generator/src/model_options.dart';
 
 /// Emits `mixin _$Foo`, the only generated code that has to live *inside* the
-/// class's interface: `==`, `hashCode`, `toString` and `toJson()`.
+/// class's interface: `==`, `hashCode` and `toString`.
+///
+/// `toJson()` is deliberately *not* here. A `toJson()` living in the mixin is
+/// invisible to `json_serializable` while an enclosing model is generated, so
+/// every model embedding another model needed a marker interface to be
+/// serializable. Declaring it in the class body instead removes that whole
+/// failure mode.
 ///
 /// The mixin has no `on` clause — a mixin cannot be applied to the very class it
 /// is constrained on — so its superclass constraint is `Object`, which is
@@ -26,7 +32,6 @@ class MixinEmitter {
       if (options.equality) _equals,
       if (options.equality) _hashCode,
       if (options.equality && options.stringify) _toString,
-      if (options.serializable && options.createToJson) _toJson,
     ];
 
     final name = '_\$${shape.name}${shape.typeParameters}';
@@ -37,8 +42,8 @@ class MixinEmitter {
     return 'mixin $name {\n${members.join('\n\n')}\n}';
   }
 
-  /// The fields that define identity, in declaration order.
-  List<FieldElement> get _fields => shape.declaredFields
+  /// The fields that define identity, superclass-first then declaration order.
+  List<FieldElement> get _fields => shape.fields
       .where((field) => ModelFieldConfig.of(field).equality)
       .toList();
 
@@ -112,26 +117,5 @@ class MixinEmitter {
         '    final self = this as ${shape.selfType};\n'
         "    return '${shape.name}($parts)';\n"
         '  }';
-  }
-
-  String get _toJson {
-    final toJsonFunction = '_\$${shape.name}ToJson';
-    if (!options.genericArgumentFactories) {
-      return '  Map<String, dynamic> toJson() =>\n'
-          '      $toJsonFunction(this as ${shape.selfType});';
-    }
-
-    final parameters = shape.element.typeParameters
-        .map(
-          (p) =>
-              'Object? Function(${p.displayName} value) toJson${p.displayName}',
-        )
-        .join(', ');
-    final arguments = shape.element.typeParameters
-        .map((p) => 'toJson${p.displayName}')
-        .join(', ');
-
-    return '  Map<String, dynamic> toJson($parameters) =>\n'
-        '      $toJsonFunction(this as ${shape.selfType}, $arguments);';
   }
 }
