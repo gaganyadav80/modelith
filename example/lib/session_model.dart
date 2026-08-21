@@ -15,6 +15,8 @@ class SessionModel with _$SessionModel {
   factory SessionModel.fromJson(Map<String, dynamic> json) =>
       _$SessionModelFromJson(json);
 
+  Map<String, dynamic> toJson() => _$SessionModelToJson(this);
+
   @ModelField(name: 'access_token')
   final String token;
 

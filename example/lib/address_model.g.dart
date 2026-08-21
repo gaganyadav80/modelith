@@ -44,6 +44,4 @@ mixin _$AddressModel {
     final self = this as AddressModel;
     return 'AddressModel(city: ${self.city}, postcode: ${self.postcode})';
   }
-
-  Map<String, dynamic> toJson() => _$AddressModelToJson(this as AddressModel);
 }

@@ -5,12 +5,15 @@ committed so the output can be reviewed without running a build.
 
 | File | Shows |
 | --- | --- |
-| `lib/address_model.dart` | flat model, nullable field, `implements JsonModel` |
+| `lib/address_model.dart` | flat model, nullable field, the two json glue lines |
 | `lib/user_model.dart` | nested `@Model` field, list field, `explicitToJson` |
 | `lib/session_model.dart` | renamed json keys, `equality: false`, `copyWith: false`, `stringify` |
+| `lib/converter_model.dart` | per-field `fromJson` / `toJson` / `readValue` functions |
+| `lib/enum_model.dart` | `@ModelEnum` / `@ModelValue`, `fieldRename`, `unknownEnumValue`, one map for two models |
 | `lib/prefs_model.dart` | every deep-equality path: list, set, map, nested list, `Object?` |
 | `lib/page_model.dart` | generic model with `genericArgumentFactories` |
 | `lib/opt_out_models.dart` | one class per `@Model` opt-out flag, three models in one part file |
+| `lib/inheritance_model.dart` | inherited fields in equality: a non-`@Model` base class, a mixin, `equality: false` on a base field |
 
 ```bash
 dart pub get

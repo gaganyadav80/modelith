@@ -47,13 +47,10 @@ void main() {
       expect(MutableCounter(count: 1), isNot(MutableCounter(count: 1)));
     });
 
-    test('emits no equality members', () {
+    test('emits an empty mixin', () {
       final source = File('lib/opt_out_models.g.dart').readAsStringSync();
-      final mixinBody = source.split('mixin _\$MutableCounter {').last;
 
-      expect(mixinBody, isNot(contains('operator ==')));
-      expect(mixinBody, isNot(contains('hashCode')));
-      expect(mixinBody, contains('toJson'));
+      expect(source, contains('mixin _\$MutableCounter {}'));
     });
   });
 }

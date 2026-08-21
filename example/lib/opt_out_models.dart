@@ -2,8 +2,8 @@ import 'package:modelith/modelith.dart';
 
 part 'opt_out_models.g.dart';
 
-/// `serializable: false` — no json functions, no `toJson()`, and no
-/// hand-written `fromJson` line.
+/// `serializable: false` — no json functions, so neither hand-written json line
+/// belongs on the class.
 @Model(serializable: false)
 class PlainPoint with _$PlainPoint {
   const PlainPoint(this.x, this.y);
@@ -24,6 +24,8 @@ class NoCopyToken with _$NoCopyToken {
   factory NoCopyToken.fromJson(Map<String, dynamic> json) =>
       _$NoCopyTokenFromJson(json);
 
+  Map<String, dynamic> toJson() => _$NoCopyTokenToJson(this);
+
   @ModelField()
   final String value;
 }
@@ -36,6 +38,8 @@ class MutableCounter with _$MutableCounter {
 
   factory MutableCounter.fromJson(Map<String, dynamic> json) =>
       _$MutableCounterFromJson(json);
+
+  Map<String, dynamic> toJson() => _$MutableCounterToJson(this);
 
   @ModelField()
   int count;

@@ -54,7 +54,4 @@ mixin _$PageModel<T> {
     final self = this as PageModel<T>;
     return 'PageModel(items: ${self.items}, total: ${self.total})';
   }
-
-  Map<String, dynamic> toJson(Object? Function(T value) toJsonT) =>
-      _$PageModelToJson(this as PageModel<T>, toJsonT);
 }

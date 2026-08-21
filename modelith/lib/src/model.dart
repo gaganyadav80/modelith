@@ -7,11 +7,11 @@ import 'package:meta/meta_meta.dart';
 ///
 /// * `_$FooFromJson` / `_$FooToJson` (delegated to `json_serializable`),
 /// * a `$FooCopyWith` extension carrying `copyWith`,
-/// * a `mixin _$Foo` supplying `==`, `hashCode`, `toString` and `toJson()`.
+/// * a `mixin _$Foo` supplying `==`, `hashCode` and `toString`.
 ///
 /// The class stays an ordinary Dart class with real fields and a real
-/// constructor. The one piece of glue that cannot be generated is the
-/// `fromJson` factory — see the package README for why.
+/// constructor. The glue that cannot be generated is the two json lines —
+/// see the package README for why.
 ///
 /// ```dart
 /// @Model()
@@ -19,6 +19,8 @@ import 'package:meta/meta_meta.dart';
 ///   const Foo(this.bar);
 ///
 ///   factory Foo.fromJson(Map<String, dynamic> json) => _$FooFromJson(json);
+///
+///   Map<String, dynamic> toJson() => _$FooToJson(this);
 ///
 ///   @ModelField(name: 'bar_value')
 ///   final String bar;
@@ -54,10 +56,10 @@ class Model {
     this.converters,
   });
 
-  /// Generate `_$FooFromJson` / `_$FooToJson` and the `toJson()` member of the
-  /// `_$Foo` mixin.
+  /// Generate `_$FooFromJson` / `_$FooToJson`.
   ///
-  /// When `false`, drop the hand-written `fromJson` factory from the class.
+  /// When `false`, drop the hand-written `fromJson` factory and `toJson()` from
+  /// the class.
   final bool serializable;
 
   /// Generate the `$FooCopyWith` extension.

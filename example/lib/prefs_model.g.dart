@@ -74,6 +74,4 @@ mixin _$PrefsModel {
     final self = this as PrefsModel;
     return 'PrefsModel(order: ${self.order}, labels: ${self.labels}, limits: ${self.limits}, matrix: ${self.matrix}, extra: ${self.extra})';
   }
-
-  Map<String, dynamic> toJson() => _$PrefsModelToJson(this as PrefsModel);
 }

@@ -40,6 +40,23 @@ This is what lets `@ModelField` carry all json config. Confirmed again in the
 example package: `@ModelField(name: 'access_token')` renames the key in both
 directions.
 
+**Caveat — inheriting the options is not enough.** Detection and
+`ConstantReader.read` are assignability/super aware, but `fromJson` and `toJson`
+are not read through `ConstantReader`: `type_helper_ctx.dart:140` calls
+`DartObject.getField(paramName)` directly, and
+`DartObjectImpl.getField` is a flat lookup into `GenericState.fields`
+(`analyzer .../constant/value.dart:549`). Options passed to a superclass
+constructor live under the `(super)` pseudo-field
+(`GenericState.SUPERCLASS_FIELD`), which that lookup never visits, so a
+`super.fromJson` parameter is silently dropped from the generated code — no
+error, no warning, and a wire-type mismatch that only fails at runtime.
+
+`ModelField` therefore **implements** `JsonKey` and declares every option as its
+own field. `readValue` was never affected (it is read via `ConstantReader`),
+which is why the two bugs presented separately. Regression coverage:
+`modelith_generator/test/model_generator_test.dart` ("applies the per-field
+fromJson and toJson functions") and `example/lib/converter_model.dart`.
+
 ## G2 — `JsonSerializableGenerator` is callable: **CONFIRMED**
 
 `package:json_serializable/json_serializable.dart` exports
@@ -147,8 +164,6 @@ mixin _$Foo {
     final self = this as Foo;
     return self.bar == other.bar;
   }
-
-  Map<String, dynamic> toJson() => _$FooToJson(this as Foo);
 }
 ```
 
@@ -211,37 +226,85 @@ Two deliberate behaviour differences from `equatable`:
   reports them equal; `ModelEquality.objects` checks the container kind from both
   sides.
 
-### Nested models need `implements JsonModel`
+### `toJson()` is hand-written, not emitted into the mixin
 
 `json_serializable` decides whether a nested type can be serialized by looking
 for a `toJson` method on the type or its supertypes, falling back to
 `jsonSerializableChecker.firstAnnotationOfExact` on that type
 (`lib/src/type_helpers/json_helper.dart:229`). The exact-type check means a
-`@Model` subtype trick cannot help here, and the nested model's `toJson()` lives
-in a mixin whose part file does not exist yet while the outer model is being
-generated — a genuine phase-ordering problem, not a caching artefact (it
-reproduced on a clean build, a rebuild, and after touching the outer file).
+`@Model` subtype trick cannot help here.
 
-Fix: `modelith` ships `abstract interface class JsonModel { Map<String, dynamic> toJson(); }`.
-A nested model adds `implements JsonModel` to its header — the generated mixin
-already satisfies it, so no body is written. The generator pre-checks fields
-(including type arguments, so `List<Address>` is covered) and fails with
+A `toJson()` emitted into `mixin _$Foo` therefore breaks every nested model: the
+mixin's part file does not exist yet while the **outer** model is being
+generated, so the member is unresolvable and the build fails with
 
-> Field `address` of `UserModel` embeds the model `AddressModel`, whose
-> `toJson()` comes from a mixin that is not generated yet. Add
-> `implements JsonModel` to the `AddressModel` declaration.
+> Could not generate `toJson` code for `address` because of type `AddressModel`.
 
-instead of the upstream "Could not generate `toJson` code" message. The
-deserialize direction needs nothing: `json_serializable` finds the hand-written
-`fromJson` constructor by name.
+This is a genuine phase-ordering problem, not a caching artefact — it reproduced
+on a clean build, a rebuild, and after touching the outer file. It also hit
+models outside modelith: a plain `@JsonSerializable` class with a `@Model` field
+got the same message with no modelith code in the loop to explain it.
+
+A marker interface (`implements JsonModel`) was tried first and rejected: it made
+"is this model nestable" a property of the *nested* class's header, so adding a
+field to one model could require editing an unrelated file, and it needed a
+pre-check in the generator purely to translate the upstream message.
+
+Fix: the mixin never emits `toJson()`. Each serializable model declares it in the
+class body next to the `fromJson` factory:
+
+```dart
+factory Foo.fromJson(Map<String, dynamic> json) => _$FooFromJson(json);
+
+Map<String, dynamic> toJson() => _$FooToJson(this);
+```
+
+That is a real declaration in the class element, so `json_serializable` resolves
+it in any generation order, from any outer model, `@Model` or not. Cost is one
+line per model; `JsonModel` and the pre-check are gone. Covered by
+`serializes a field whose type is another model` in
+`modelith_generator/test/model_generator_test.dart` and by `example/lib/user_model.dart`.
+The deserialize direction needed nothing either way: `json_serializable` finds the
+hand-written `fromJson` constructor by name.
 
 ### Generics
 
 `@Model(genericArgumentFactories: true)` on `class PageModel<T>` produces a
-`extension $PageModelCopyWith<T> on PageModel<T>`, a `mixin _$PageModel<T>`, and
-a `toJson(Object? Function(T value) toJsonT)` matching the generated
+`extension $PageModelCopyWith<T> on PageModel<T>` and a `mixin _$PageModel<T>`.
+The hand-written `toJson` takes the per-argument encoder to match
 `_$PageModelToJson`. Covered by `example/test/generic_test.dart`.
 
 ### `FieldElement.isSynthetic` is gone in analyzer 13
 
 Getter-induced fields are filtered with `isOriginDeclaration` instead.
+
+### Enum annotations have to be aliases, not subtypes
+
+`ModelField implements JsonKey` works because `json_serializable` matches
+annotations by assignability. Enums do not follow that rule: `enum_utils.dart`
+reads the per-entry annotation with
+
+```dart
+const TypeChecker.typeNamed(JsonValue, inPackage: 'json_annotation')
+    .firstAnnotationOfExact(field)
+```
+
+so a `class ModelValue implements JsonValue` would be **silently ignored** —
+entries would fall back to their renamed names with no error to point at.
+`ModelEnum` and `ModelValue` are therefore `typedef`s, which keeps the constant's
+type exactly `JsonEnum` / `JsonValue`. Verified by `reads @ModelValue and
+@ModelEnum off an enum a model holds` in
+`modelith_generator/test/model_generator_test.dart`, and by
+`example/lib/enum_model.g.dart`, where `@ModelValue('admin')` reaches the map.
+
+`@JsonEnum(alwaysCreate: true)` is handled by a second generator upstream
+(`JsonEnumGenerator`, exported from `package:json_serializable`), which
+`json_serializable` merges with its class generator through a private
+`_UnifiedGenerator` so a shared enum map is not defined twice. Modelith needed the
+same merge, and gets it by having `ModelGenerator` walk both annotations itself
+and pool the fragments in a `Set` — the per-class output is returned as an
+`Iterable<String>` rather than one joined string precisely so that a duplicate
+map collapses. Verified by `emits one enum map for two models over the same enum`
+and by `example/lib/enum_model.g.dart`, where `_$RoleEnumMap` is asked for by two
+models and `_$TierEnumMap` by two models plus `alwaysCreate`, and each is defined
+once.

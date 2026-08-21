@@ -58,6 +58,4 @@ mixin _$UserModel {
     final self = this as UserModel;
     return 'UserModel(id: ${self.id}, address: ${self.address}, tags: ${self.tags})';
   }
-
-  Map<String, dynamic> toJson() => _$UserModelToJson(this as UserModel);
 }
